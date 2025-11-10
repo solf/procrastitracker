@@ -83,7 +83,14 @@ VOID CALLBACK timerfunc(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime) {
         stop_xinput_activity_timer();
     }
     
-    DWORD idletime = (dwTime - last_activity) / 1000;  // same here
+    DWORD current_time = GetTickCount();
+    DWORD idletime;
+    if (current_time >= last_activity) {
+        idletime = (current_time - last_activity) / 1000;
+    } else {
+        // Race condition or GetTickCount() wraparound - treat as no idle time
+        idletime = 0;
+    }
     log_idle_seconds = idletime;
     if (foregroundfullscreen && prefs[PREF_FOREGROUNDFULLSCREEN].ival) {
         // break idle if conditions are met and user prefs want it
