@@ -1,0 +1,37 @@
+# Example exclusions file for ProcrastiTracker
+# Copy relevant lines to %APPDATA%\procrastitrackerdbs\exclusions.txt
+# Or use the Advanced Settings dialog to configure
+
+# Exclude PowerShell windows
+exe:pwsh
+
+# Exclude any window with "password" in the title
+title:.*password.*
+
+# Exclude specific password-related window from your screenshot
+title:^sqlf_pwdw.*
+
+# Exclude Windows Terminal
+exe:windowsterminal
+
+# Exclude Command Prompt
+exe:cmd
+
+# Exclude Notepad
+exe:notepad
+
+# Exclude any browser private/incognito windows
+title:.*(private|incognito|inprivate).*
+
+# Exclude specific banking or financial sites
+title:.*(bank|paypal|wallet|credit card).*
+
+# Exclude password managers
+exe:(keepass|lastpass|1password|bitwarden)
+
+# Exclude system windows
+exe:(taskmgr|regedit|services)
+
+# You can also use simple substring matching without wildcards:
+# exe:chrome  (matches any exe containing "chrome")
+

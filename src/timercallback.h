@@ -223,6 +223,25 @@ VOID CALLBACK timerfunc(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime) {
     strncpy(log_title, title, MAXTMPSTR - 1);
     log_title[MAXTMPSTR - 1] = 0;
 
+    // Check if this should be excluded from tracking
+    extern bool is_excluded(const char *exename, const char *title, std::string &reason);
+    std::string exclusion_reason;
+    if (is_excluded(exename, title, exclusion_reason)) {
+        // Capture input stats for logging
+        log_keys = (key + 1) / 2;
+        log_lmb = lmb;
+        log_rmb = rmb;
+        log_scr = (scr + 119) / 120;
+        
+        log_status = "SKIPPED";
+        log_reason = exclusion_reason.c_str();
+        // Don't build attributed string for skipped items, but log exename/title separately
+        log_tick_complete(log_status, log_reason, log_attributed, log_exename, log_url, log_title,
+                          log_idle_seconds, log_keys, log_lmb, log_rmb, log_scr,
+                          log_fullscreen, log_controller, timer_sample_val);
+        return;
+    }
+
     std::string s = exename;
     if (url[0] && s[0]) s += " - ";
     s += url;
