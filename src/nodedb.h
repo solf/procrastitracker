@@ -2,20 +2,14 @@
 void save(bool filtered = false, char *givenfilename = NULL) {
     static int firstsave = TRUE;
     extern bool save_failure_alerted;
+    extern HWND mainhwnd;
     
     // Check if temp file already exists (indicates previous save failure)
     if (!givenfilename && GetFileAttributesA(databasetemp) != INVALID_FILE_ATTRIBUTES) {
         if (!save_failure_alerted) {
             save_failure_alerted = true;
-            char msg[512];
-            sprintf_s(msg, 512, 
-                "Cannot save: temp file already exists.\n"
-                "Location: %s\n\n"
-                "This may indicate a previous save failure or disk issue.\n"
-                "Please check disk space and file permissions, then delete the temp file manually.\n\n"
-                "ProcrastiTracker will continue tracking in memory.",
-                databasetemp);
-            MessageBoxA(NULL, msg, "Database Save Failed", MB_OK | MB_ICONWARNING);
+            // Post message to main window to show error dialog (non-blocking)
+            PostMessage(mainhwnd, WM_USER + 100, 0, 0);
         }
         return;  // Don't save, but keep running
     }
@@ -72,15 +66,8 @@ void save(bool filtered = false, char *givenfilename = NULL) {
             // Move failed - alert user but keep temp file for recovery
             if (!save_failure_alerted) {
                 save_failure_alerted = true;
-                char msg[512];
-                sprintf_s(msg, 512, 
-                    "Failed to move temp database to final location.\n"
-                    "Temp file: %s\n"
-                    "Target: %s\n\n"
-                    "Please check file permissions and disk space.\n"
-                    "ProcrastiTracker will continue tracking in memory.",
-                    databasetemp, databasemain);
-                MessageBoxA(NULL, msg, "Database Save Failed", MB_OK | MB_ICONWARNING);
+                // Post message to main window to show error dialog (non-blocking)
+                PostMessage(mainhwnd, WM_USER + 100, 1, 0);
             }
         }
     }
