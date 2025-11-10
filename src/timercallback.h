@@ -1,4 +1,9 @@
 
+// Set to true to enable legacy DDE browser URL extraction (may cause blocking/crashes)
+// Modern browsers (Firefox, Chrome, Edge) don't support DDE anymore
+// Only enable for testing with Internet Explorer or old browsers
+const bool ENABLE_BROWSER_DDE = false;
+
 BOOL CALLBACK EnumChildWindowsCallback(HWND hWnd, LPARAM lp) {
     DWORD *procids = (DWORD *)lp;
     DWORD pid = 0;
@@ -175,7 +180,9 @@ VOID CALLBACK timerfunc(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime) {
         strcmp(exename, "msedge") == 0) {
         // TODO: can we get a UTF-8 URL out of this somehow, if the URL contains percent encoded
         // unicode chars?
-        ddereq(exename, "WWW_GetWindowInfo", "0xFFFFFFFF", url, MAXTMPSTR);
+        if (ENABLE_BROWSER_DDE) {
+            ddereq(exename, "WWW_GetWindowInfo", "0xFFFFFFFF", url, MAXTMPSTR);
+        }
         if (!*url) {
             if (!strcmp(exename, "chrome") || !strcmp(exename, "msedge")) {
                 // Chrome doesn't support DDE, get last url change from it:
