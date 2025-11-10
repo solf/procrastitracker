@@ -177,6 +177,7 @@ char databasetemp[MAX_PATH];
 char debuglogpath[MAX_PATH];
 char exclusionspath[MAX_PATH];
 bool debug_log_line_incomplete = false;
+bool save_failure_alerted = false;
 
 // Exclusion patterns storage
 struct ExclusionPattern {

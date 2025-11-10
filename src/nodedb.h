@@ -1,6 +1,25 @@
 
 void save(bool filtered = false, char *givenfilename = NULL) {
     static int firstsave = TRUE;
+    extern bool save_failure_alerted;
+    
+    // Check if temp file already exists (indicates previous save failure)
+    if (!givenfilename && GetFileAttributesA(databasetemp) != INVALID_FILE_ATTRIBUTES) {
+        if (!save_failure_alerted) {
+            save_failure_alerted = true;
+            char msg[512];
+            sprintf_s(msg, 512, 
+                "Cannot save: temp file already exists.\n"
+                "Location: %s\n\n"
+                "This may indicate a previous save failure or disk issue.\n"
+                "Please check disk space and file permissions, then delete the temp file manually.\n\n"
+                "ProcrastiTracker will continue tracking in memory.",
+                databasetemp);
+            MessageBoxA(NULL, msg, "Database Save Failed", MB_OK | MB_ICONWARNING);
+        }
+        return;  // Don't save, but keep running
+    }
+    
     gzFile f = gzopen(givenfilename ? givenfilename : databasetemp, "wb1h");
     if (!f) panic("PT: could not open database file for writing");
     wint(f, FILE_FORMAT_VERSION);
@@ -15,6 +34,18 @@ void save(bool filtered = false, char *givenfilename = NULL) {
     loop(i, NUM_PREFS) wint(f, prefs[i].ival);
     root->save(f, filtered);
     if (gzclose(f) != Z_OK) panic("PT: could not finish writing database file");
+    
+    // Ensure data is flushed to disk before moving
+    if (!givenfilename) {
+        HANDLE hFile = CreateFileA(databasetemp, GENERIC_READ, 
+                                   FILE_SHARE_READ, NULL, OPEN_EXISTING, 
+                                   FILE_ATTRIBUTE_NORMAL, NULL);
+        if (hFile != INVALID_HANDLE_VALUE) {
+            FlushFileBuffers(hFile);
+            CloseHandle(hFile);
+        }
+    }
+    
     if (!givenfilename) {
         lastsavetime = GetTickCount();
         // only delete previous backups if we have a database
@@ -32,7 +63,26 @@ void save(bool filtered = false, char *givenfilename = NULL) {
             DeleteFileA(databaseback);
             MoveFileA(databasemain, databaseback);  // backup last saved
         }
-        MoveFileA(databasetemp, databasemain);
+        
+        // Move temp to main, check for success
+        if (MoveFileA(databasetemp, databasemain)) {
+            // Reset failure flag on successful save
+            save_failure_alerted = false;
+        } else {
+            // Move failed - alert user but keep temp file for recovery
+            if (!save_failure_alerted) {
+                save_failure_alerted = true;
+                char msg[512];
+                sprintf_s(msg, 512, 
+                    "Failed to move temp database to final location.\n"
+                    "Temp file: %s\n"
+                    "Target: %s\n\n"
+                    "Please check file permissions and disk space.\n"
+                    "ProcrastiTracker will continue tracking in memory.",
+                    databasetemp, databasemain);
+                MessageBoxA(NULL, msg, "Database Save Failed", MB_OK | MB_ICONWARNING);
+            }
+        }
     }
 }
 
