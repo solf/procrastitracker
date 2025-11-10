@@ -372,7 +372,7 @@ bool is_excluded(const char *exename, const char *title, std::string &reason) {
     for (const auto &excl : exclusion_patterns) {
         try {
             const char *test_str = (excl.type == ExclusionPattern::EXE) ? exename : title;
-            if (std::regex_search(test_str, excl.pattern)) {
+            if (std::regex_match(test_str, excl.pattern)) {
                 reason = (excl.type == ExclusionPattern::EXE ? "excluded_exe:" : "excluded_title:") 
                          + excl.pattern_str;
                 return true;
