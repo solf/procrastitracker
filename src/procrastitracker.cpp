@@ -170,6 +170,7 @@ char databaseroot[MAX_PATH];
 char databasemain[MAX_PATH];
 char databaseback[MAX_PATH];
 char databasetemp[MAX_PATH];
+char debuglogpath[MAX_PATH];
 
 #include "nodedb.h"
 #include "ddeutil.h"
@@ -387,6 +388,78 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
     return 0;
 }
 
+// Helper function to escape tabs and newlines in strings for TSV format
+void escape_for_tsv(char *dest, const char *src, size_t destsize) {
+    size_t j = 0;
+    for (size_t i = 0; src[i] && j < destsize - 1; i++) {
+        if (src[i] == '\t') {
+            if (j < destsize - 2) {
+                dest[j++] = '\\';
+                dest[j++] = 't';
+            }
+        } else if (src[i] == '\n') {
+            if (j < destsize - 2) {
+                dest[j++] = '\\';
+                dest[j++] = 'n';
+            }
+        } else if (src[i] == '\r') {
+            if (j < destsize - 2) {
+                dest[j++] = '\\';
+                dest[j++] = 'r';
+            }
+        } else {
+            dest[j++] = src[i];
+        }
+    }
+    dest[j] = 0;
+}
+
+// Log one tick to debug.log if it exists
+void log_tick(const char *status, const char *reason, const char *attributed_string,
+              const char *exename, const char *url, const char *title,
+              DWORD idle_seconds, int keys, int lmb, int rmb, int scr,
+              bool fullscreen, bool controller, DWORD sample_interval) {
+    // Check if debug.log exists - if not, skip logging entirely
+    DWORD attrs = GetFileAttributesA(debuglogpath);
+    if (attrs == INVALID_FILE_ATTRIBUTES || (attrs & FILE_ATTRIBUTE_DIRECTORY)) {
+        return;  // File doesn't exist or is a directory
+    }
+
+    FILE *f = fopen(debuglogpath, "a");
+    if (!f) return;
+
+    // Check if file is empty/new - write header if so
+    fseek(f, 0, SEEK_END);
+    long filesize = ftell(f);
+    if (filesize == 0) {
+        fprintf(f, "Timestamp\tStatus\tReason\tAttributed_String\tExe_Name\tURL\tWindow_Title\t"
+                   "Idle_Seconds\tKeys\tMouse_Left\tMouse_Right\tScroll\tFullscreen\tController\t"
+                   "Sample_Interval\n");
+    }
+
+    // Get current timestamp with milliseconds
+    SYSTEMTIME st;
+    GetLocalTime(&st);
+    
+    // Escape special characters in string fields
+    char esc_attributed[MAXTMPSTR * 2];
+    char esc_exename[MAXTMPSTR * 2];
+    char esc_url[MAXTMPSTR * 2];
+    char esc_title[MAXTMPSTR * 2];
+    escape_for_tsv(esc_attributed, attributed_string ? attributed_string : "", sizeof(esc_attributed));
+    escape_for_tsv(esc_exename, exename ? exename : "", sizeof(esc_exename));
+    escape_for_tsv(esc_url, url ? url : "", sizeof(esc_url));
+    escape_for_tsv(esc_title, title ? title : "", sizeof(esc_title));
+
+    // Write tab-separated line
+    fprintf(f, "%04d-%02d-%02d %02d:%02d:%02d.%03d\t%s\t%s\t%s\t%s\t%s\t%s\t%lu\t%d\t%d\t%d\t%d\t%d\t%d\t%lu\n",
+            st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond, st.wMilliseconds,
+            status, reason ? reason : "", esc_attributed, esc_exename, esc_url, esc_title,
+            idle_seconds, keys, lmb, rmb, scr, fullscreen ? 1 : 0, controller ? 1 : 0, sample_interval);
+
+    fclose(f);
+}
+
 void MakeDPIAware() {
     #ifdef _WIN32
         // Without this, Windows scales the window if scaling is set in display settings.
@@ -488,9 +561,11 @@ int APIENTRY _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
     strcpy(databasemain, databaseroot);
     strcpy(databaseback, databaseroot);
     strcpy(databasetemp, databaseroot);
+    strcpy(debuglogpath, databaseroot);
     PathAppend(databasemain, "db.PT");
     PathAppend(databaseback, "db_BACKUP.PT");
     PathAppend(databasetemp, "db_TEMP.~PT");
+    PathAppend(debuglogpath, "debug.log");
     starttime = now();
     endtime = now();
     load(root, databasemain, false);
