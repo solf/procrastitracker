@@ -171,6 +171,7 @@ char databasemain[MAX_PATH];
 char databaseback[MAX_PATH];
 char databasetemp[MAX_PATH];
 char debuglogpath[MAX_PATH];
+bool debug_log_line_incomplete = false;
 
 #include "nodedb.h"
 #include "ddeutil.h"
@@ -388,6 +389,41 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
     return 0;
 }
 
+// Write timestamp at start of each tick (phase 1 of logging)
+void log_tick_start() {
+    // Check if debug.log exists - if not, skip logging entirely
+    DWORD attrs = GetFileAttributesA(debuglogpath);
+    if (attrs == INVALID_FILE_ATTRIBUTES || (attrs & FILE_ATTRIBUTE_DIRECTORY)) {
+        return;  // File doesn't exist or is a directory
+    }
+
+    FILE *f = fopen(debuglogpath, "a");
+    if (!f) return;
+
+    // Check if file is empty/new - write header if so
+    fseek(f, 0, SEEK_END);
+    long filesize = ftell(f);
+    if (filesize == 0) {
+        fprintf(f, "Timestamp\tStatus\tReason\tAttributed_String\tExe_Name\tURL\tWindow_Title\t"
+                   "Idle_Seconds\tKeys\tMouse_Left\tMouse_Right\tScroll\tFullscreen\tController\t"
+                   "Sample_Interval\n");
+    }
+
+    // If previous line incomplete, add newline to finish it
+    if (debug_log_line_incomplete) {
+        fprintf(f, "\n");
+    }
+
+    // Write timestamp WITHOUT newline
+    SYSTEMTIME st;
+    GetLocalTime(&st);
+    fprintf(f, "%04d-%02d-%02d %02d:%02d:%02d.%03d",
+            st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond, st.wMilliseconds);
+
+    debug_log_line_incomplete = true;
+    fclose(f);
+}
+
 // Helper function to escape tabs and newlines in strings for TSV format
 void escape_for_tsv(char *dest, const char *src, size_t destsize) {
     size_t j = 0;
@@ -414,11 +450,11 @@ void escape_for_tsv(char *dest, const char *src, size_t destsize) {
     dest[j] = 0;
 }
 
-// Log one tick to debug.log if it exists
-void log_tick(const char *status, const char *reason, const char *attributed_string,
-              const char *exename, const char *url, const char *title,
-              DWORD idle_seconds, int keys, int lmb, int rmb, int scr,
-              bool fullscreen, bool controller, DWORD sample_interval) {
+// Complete log line with data (phase 2 of logging)
+void log_tick_complete(const char *status, const char *reason, const char *attributed_string,
+                       const char *exename, const char *url, const char *title,
+                       DWORD idle_seconds, int keys, int lmb, int rmb, int scr,
+                       bool fullscreen, bool controller, DWORD sample_interval) {
     // Check if debug.log exists - if not, skip logging entirely
     DWORD attrs = GetFileAttributesA(debuglogpath);
     if (attrs == INVALID_FILE_ATTRIBUTES || (attrs & FILE_ATTRIBUTE_DIRECTORY)) {
@@ -427,19 +463,6 @@ void log_tick(const char *status, const char *reason, const char *attributed_str
 
     FILE *f = fopen(debuglogpath, "a");
     if (!f) return;
-
-    // Check if file is empty/new - write header if so
-    fseek(f, 0, SEEK_END);
-    long filesize = ftell(f);
-    if (filesize == 0) {
-        fprintf(f, "Timestamp\tStatus\tReason\tAttributed_String\tExe_Name\tURL\tWindow_Title\t"
-                   "Idle_Seconds\tKeys\tMouse_Left\tMouse_Right\tScroll\tFullscreen\tController\t"
-                   "Sample_Interval\n");
-    }
-
-    // Get current timestamp with milliseconds
-    SYSTEMTIME st;
-    GetLocalTime(&st);
     
     // Escape special characters in string fields
     char esc_attributed[MAXTMPSTR * 2];
@@ -451,12 +474,12 @@ void log_tick(const char *status, const char *reason, const char *attributed_str
     escape_for_tsv(esc_url, url ? url : "", sizeof(esc_url));
     escape_for_tsv(esc_title, title ? title : "", sizeof(esc_title));
 
-    // Write tab-separated line
-    fprintf(f, "%04d-%02d-%02d %02d:%02d:%02d.%03d\t%s\t%s\t%s\t%s\t%s\t%s\t%lu\t%d\t%d\t%d\t%d\t%d\t%d\t%lu\n",
-            st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond, st.wMilliseconds,
+    // Append rest of data (starting with tab, ending with newline)
+    fprintf(f, "\t%s\t%s\t%s\t%s\t%s\t%s\t%lu\t%d\t%d\t%d\t%d\t%d\t%d\t%lu\n",
             status, reason ? reason : "", esc_attributed, esc_exename, esc_url, esc_title,
             idle_seconds, keys, lmb, rmb, scr, fullscreen ? 1 : 0, controller ? 1 : 0, sample_interval);
 
+    debug_log_line_incomplete = false;
     fclose(f);
 }
 
