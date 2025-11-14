@@ -1,3 +1,12 @@
+Changed from Original
+================
+
+- Adds debug logging (via debug.log)
+- Disables browser DDE completely -- it doesn't work with modern browsers anyway and sometimes causes serious instability
+- Adds option to exclude stuff from tracking (by exe or by title)
+- I had issues losing the entire DB data during crashes or smth, so attempted to make it more bullet-proof
+- Fixed (hopefully) rare race condition which sometimes causes idle to be detected when it's very much not idle
+
 ProcrastiTracker
 ================
 
