@@ -1,37 +1,48 @@
 # Example exclusions file for ProcrastiTracker
 # Copy relevant lines to %APPDATA%\procrastitrackerdbs\exclusions.txt
 # Or use the Advanced Settings dialog to configure
+#
+# IMPORTANT NOTES:
+# - Exe names are lowercase without .exe extension (e.g., "pwsh" not "pwsh.exe")
+# - Patterns match the ENTIRE string (not substrings) - use .* for wildcards
+# - Patterns are case-insensitive regex
 
-# Exclude PowerShell windows
+# Exclude PowerShell exactly
 exe:pwsh
 
-# Exclude any window with "password" in the title
+# Exclude any window with "password" anywhere in the title
 title:.*password.*
 
-# Exclude specific password-related window from your screenshot
-title:^sqlf_pwdw.*
+# Exclude specific password-related window (e.g., sqlf_pwdWindowTitle from screenshot)
+title:sqlf_pwdw.*
 
-# Exclude Windows Terminal
+# Exclude Windows Terminal exactly
 exe:windowsterminal
 
-# Exclude Command Prompt
+# Exclude Command Prompt exactly
 exe:cmd
 
-# Exclude Notepad
+# Exclude Notepad exactly
 exe:notepad
 
 # Exclude any browser private/incognito windows
 title:.*(private|incognito|inprivate).*
 
-# Exclude specific banking or financial sites
+# Exclude window titles containing banking keywords
 title:.*(bank|paypal|wallet|credit card).*
 
-# Exclude password managers
+# Exclude multiple password managers (matches any of them)
 exe:(keepass|lastpass|1password|bitwarden)
 
-# Exclude system windows
+# Exclude multiple system tools
 exe:(taskmgr|regedit|services)
 
-# You can also use simple substring matching without wildcards:
-# exe:chrome  (matches any exe containing "chrome")
+# Exclude all browsers
+exe:(chrome|firefox|msedge|opera)
+
+# Exclude window titles that start with "Private -"
+title:Private -.*
+
+# Exclude exact window title match
+title:My Secret Project
 

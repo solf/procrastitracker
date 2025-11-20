@@ -44,27 +44,46 @@ The exclusion feature allows you to skip tracking specific applications by exe n
 - Prefix with `title:` to match against window title (e.g., `title:.*password.*`)
 - Lines without prefix default to exe matching
 - Empty lines and lines starting with `#` are ignored (comments)
+- **Patterns match the entire string** (not substrings) - use `.*` wildcards as needed
+
+### Important: How Exe Names Work
+The exe name is extracted as:
+- **Lowercase** (e.g., "chrome" not "Chrome")
+- **No `.exe` extension** (e.g., "notepad" not "notepad.exe")
+- **No path** (e.g., "pwsh" not "C:\Windows\System32\WindowsPowerShell\v1.0\pwsh")
+
+Examples:
+- PowerShell → `pwsh`
+- Google Chrome → `chrome`
+- Windows Terminal → `windowsterminal`
+- Visual Studio Code → `code`
 
 ### Example Patterns
 
 ```
-# Exclude PowerShell
+# Exclude PowerShell exactly
 exe:pwsh
 
-# Exclude any window with "password" in the title (case-insensitive)
+# Exclude any window with "password" anywhere in the title (case-insensitive)
 title:.*password.*
 
-# Exclude notepad
+# Exclude notepad exactly
 exe:notepad
 
 # Exclude any window title starting with "sqlf_pwdw"
-title:^sqlf_pwdw.*
+title:sqlf_pwdw.*
 
-# Exclude Chrome (without exe: prefix, defaults to exe)
+# Exclude Chrome exactly (without exe: prefix, defaults to exe)
 chrome
 
 # Exclude any private/incognito browsing windows
 title:.*(private|incognito).*
+
+# Exclude multiple browsers (chrome, firefox, msedge, opera)
+exe:(chrome|firefox|msedge|opera)
+
+# Exclude window titles that are exactly "Password Manager"
+title:Password Manager
 ```
 
 ### Storage Location
