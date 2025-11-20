@@ -6,6 +6,10 @@
 #include "win32tools.h"
 #include "inputdlg.h"
 
+#include <regex>
+#include <vector>
+#include <string>
+
 #include "slaballoc.h"
 SlabAlloc pool;
 #include "tools.h"
@@ -171,7 +175,28 @@ char databasemain[MAX_PATH];
 char databaseback[MAX_PATH];
 char databasetemp[MAX_PATH];
 char debuglogpath[MAX_PATH];
+char exclusionspath[MAX_PATH];
 bool debug_log_line_incomplete = false;
+
+// Exclusion patterns storage
+struct ExclusionPattern {
+    enum Type { EXE, TITLE };
+    Type type;
+    std::regex pattern;
+    std::string pattern_str;  // Store original string for logging
+    
+    ExclusionPattern(Type t, const std::string& pat_str) 
+        : type(t), pattern_str(pat_str) {
+        try {
+            pattern = std::regex(pat_str, std::regex::icase | std::regex::optimize);
+        } catch (...) {
+            // Invalid pattern - will never match
+            pattern = std::regex("(?!)");  // regex that never matches
+        }
+    }
+};
+
+std::vector<ExclusionPattern> exclusion_patterns;
 
 #include "nodedb.h"
 #include "ddeutil.h"
@@ -257,6 +282,107 @@ BOOL FileRequest(HWND hWnd, char *requestfilename, size_t reqlen, char *defaultn
     ofn.lpstrFilter = exts;
     ofn.lpstrTitle = title;
     return doexport ? GetSaveFileNameA(&ofn) : GetOpenFileNameA(&ofn);
+}
+
+// Forward declaration
+void load_exclusions();
+
+// Read exclusion file content as raw text
+// Returns allocated string (caller must free) or NULL if file doesn't exist
+char* read_exclusions_file() {
+    FILE *f = fopen(exclusionspath, "r");
+    if (!f) return NULL;  // File doesn't exist yet, that's ok
+    
+    // Read entire file
+    fseek(f, 0, SEEK_END);
+    long filesize = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    
+    char *buffer = NULL;
+    if (filesize > 0 && filesize < 1000000) {  // Sanity check
+        buffer = (char *)malloc(filesize + 1);
+        if (buffer) {
+            size_t read_size = fread(buffer, 1, filesize, f);
+            buffer[read_size] = 0;
+        }
+    }
+    
+    fclose(f);
+    return buffer;
+}
+
+// Save exclusion patterns to file
+void save_exclusions(const char *content) {
+    FILE *f = fopen(exclusionspath, "w");
+    if (!f) {
+        warn("PT: Could not save exclusions file");
+        return;
+    }
+    
+    fputs(content, f);
+    fclose(f);
+    
+    // Reload patterns after save
+    load_exclusions();
+}
+
+// Load exclusion patterns from file and parse them
+void load_exclusions() {
+    exclusion_patterns.clear();
+    
+    char *content = read_exclusions_file();
+    if (!content) return;  // File doesn't exist yet, that's ok
+    
+    // Parse line by line
+    char *line = strtok(content, "\r\n");
+    while (line) {
+        // Skip empty lines and comments
+        size_t len = strlen(line);
+        if (len > 0 && line[0] != '#') {
+            // Parse prefix
+            ExclusionPattern::Type type = ExclusionPattern::EXE;
+            const char *pattern_start = line;
+            
+            if (strncmp(line, "exe:", 4) == 0) {
+                type = ExclusionPattern::EXE;
+                pattern_start = line + 4;
+            } else if (strncmp(line, "title:", 6) == 0) {
+                type = ExclusionPattern::TITLE;
+                pattern_start = line + 6;
+            }
+            
+            // Skip if pattern is empty after prefix
+            if (*pattern_start != 0) {
+                exclusion_patterns.push_back(ExclusionPattern(type, pattern_start));
+                OutputDebugF("Loaded exclusion: %s: %s\n", 
+                             type == ExclusionPattern::EXE ? "exe" : "title",
+                             pattern_start);
+            }
+        }
+        
+        line = strtok(NULL, "\r\n");
+    }
+    
+    free(content);
+}
+
+// Check if exe or title should be excluded
+// Returns true if excluded, and sets reason to the matching pattern
+bool is_excluded(const char *exename, const char *title, std::string &reason) {
+    for (const auto &excl : exclusion_patterns) {
+        try {
+            const char *test_str = (excl.type == ExclusionPattern::EXE) ? exename : title;
+            if (std::regex_search(test_str, excl.pattern)) {
+                reason = (excl.type == ExclusionPattern::EXE ? "excluded_exe:" : "excluded_title:") 
+                         + excl.pattern_str;
+                return true;
+            }
+        } catch (...) {
+            // Regex error, skip this pattern
+            continue;
+        }
+    }
+    return false;
 }
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
@@ -585,13 +711,16 @@ int APIENTRY _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
     strcpy(databaseback, databaseroot);
     strcpy(databasetemp, databaseroot);
     strcpy(debuglogpath, databaseroot);
+    strcpy(exclusionspath, databaseroot);
     PathAppend(databasemain, "db.PT");
     PathAppend(databaseback, "db_BACKUP.PT");
     PathAppend(databasetemp, "db_TEMP.~PT");
     PathAppend(debuglogpath, "debug.log");
+    PathAppend(exclusionspath, "exclusions.txt");
     starttime = now();
     endtime = now();
     load(root, databasemain, false);
+    load_exclusions();
     firstday = starttime;
     lastsavetime = GetTickCount();
     #ifdef MINGW32_BUG
