@@ -1,6 +1,15 @@
 # visual studio generated files
 UpgradeLog.htm
 
+# Exclude basic Eclipse files.
+**/.project
+**/.classpath
+**/.settings/
+
+# IDEA
+*.iml
+.idea
+
 # others
 procrastitracker/Release
 procrastitracker/Debug
