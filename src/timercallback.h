@@ -7,15 +7,18 @@ BOOL CALLBACK EnumChildWindowsCallback(HWND hWnd, LPARAM lp) {
     return TRUE;
 }
 
-extern void log_tick(const char *status, const char *reason, const char *attributed_string,
-                     const char *exename, const char *url, const char *title,
-                     DWORD idle_seconds, int keys, int lmb, int rmb, int scr,
-                     bool fullscreen, bool controller, DWORD sample_interval);
+extern void log_tick_start();
+extern void log_tick_complete(const char *status, const char *reason, const char *attributed_string,
+                               const char *exename, const char *url, const char *title,
+                               DWORD idle_seconds, int keys, int lmb, int rmb, int scr,
+                               bool fullscreen, bool controller, DWORD sample_interval);
 
 // Input hook global counters (from IdleTracker.cpp) - we read these directly for logging
 extern int key, lmb, rmb, scr;
 
 VOID CALLBACK timerfunc(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime) {
+    // Write timestamp immediately at start of tick (phase 1 of logging)
+    log_tick_start();
     // Debug logging variables - collect throughout execution
     const char *log_status = "SKIPPED";
     const char *log_reason = "";
@@ -39,9 +42,9 @@ VOID CALLBACK timerfunc(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime) {
     HWND h = GetForegroundWindow();
     if (!h) {
         log_reason = "no_window";
-        log_tick(log_status, log_reason, log_attributed, log_exename, log_url, log_title,
-                 log_idle_seconds, log_keys, log_lmb, log_rmb, log_scr,
-                 log_fullscreen, log_controller, timer_sample_val);
+        log_tick_complete(log_status, log_reason, log_attributed, log_exename, log_url, log_title,
+                          log_idle_seconds, log_keys, log_lmb, log_rmb, log_scr,
+                          log_fullscreen, log_controller, timer_sample_val);
         return;
     }
 
@@ -89,9 +92,9 @@ VOID CALLBACK timerfunc(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime) {
             lastsavetime = dwTime;
         log_status = "IDLE";
         log_reason = "idle";
-        log_tick(log_status, log_reason, log_attributed, log_exename, log_url, log_title,
-                 log_idle_seconds, log_keys, log_lmb, log_rmb, log_scr,
-                 log_fullscreen, log_controller, timer_sample_val);
+        log_tick_complete(log_status, log_reason, log_attributed, log_exename, log_url, log_title,
+                          log_idle_seconds, log_keys, log_lmb, log_rmb, log_scr,
+                          log_fullscreen, log_controller, timer_sample_val);
         return;
     }
 
@@ -113,9 +116,9 @@ VOID CALLBACK timerfunc(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime) {
 
         if (!ph) {
             log_reason = "open_process_failed";
-            log_tick(log_status, log_reason, log_attributed, log_exename, log_url, log_title,
-                     log_idle_seconds, log_keys, log_lmb, log_rmb, log_scr,
-                     log_fullscreen, log_controller, timer_sample_val);
+            log_tick_complete(log_status, log_reason, log_attributed, log_exename, log_url, log_title,
+                              log_idle_seconds, log_keys, log_lmb, log_rmb, log_scr,
+                              log_fullscreen, log_controller, timer_sample_val);
             return;
         }
 
@@ -160,9 +163,9 @@ VOID CALLBACK timerfunc(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime) {
     if (strcmp(exename, "lockapp") == 0) {
         log_reason = "lockapp";
         strncpy(log_attributed, "lockapp", MAXTMPSTR - 1);
-        log_tick(log_status, log_reason, log_attributed, log_exename, log_url, log_title,
-                 log_idle_seconds, log_keys, log_lmb, log_rmb, log_scr,
-                 log_fullscreen, log_controller, timer_sample_val);
+        log_tick_complete(log_status, log_reason, log_attributed, log_exename, log_url, log_title,
+                          log_idle_seconds, log_keys, log_lmb, log_rmb, log_scr,
+                          log_fullscreen, log_controller, timer_sample_val);
         return;
     }
 
@@ -236,8 +239,8 @@ VOID CALLBACK timerfunc(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime) {
         log_attributed[MAXTMPSTR - 1] = 0;
     }
 
-    // Log the tick with all collected data
-    log_tick(log_status, log_reason, log_attributed, log_exename, log_url, log_title,
-             log_idle_seconds, log_keys, log_lmb, log_rmb, log_scr,
-             log_fullscreen, log_controller, timer_sample_val);
+    // Log the tick with all collected data (complete the line)
+    log_tick_complete(log_status, log_reason, log_attributed, log_exename, log_url, log_title,
+                      log_idle_seconds, log_keys, log_lmb, log_rmb, log_scr,
+                      log_fullscreen, log_controller, timer_sample_val);
 };
