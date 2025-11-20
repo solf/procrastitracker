@@ -7,7 +7,27 @@ BOOL CALLBACK EnumChildWindowsCallback(HWND hWnd, LPARAM lp) {
     return TRUE;
 }
 
+extern void log_tick(const char *status, const char *reason, const char *attributed_string,
+                     const char *exename, const char *url, const char *title,
+                     DWORD idle_seconds, int keys, int lmb, int rmb, int scr,
+                     bool fullscreen, bool controller, DWORD sample_interval);
+
+// Input hook global counters (from IdleTracker.cpp) - we read these directly for logging
+extern int key, lmb, rmb, scr;
+
 VOID CALLBACK timerfunc(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime) {
+    // Debug logging variables - collect throughout execution
+    const char *log_status = "SKIPPED";
+    const char *log_reason = "";
+    char log_attributed[MAXTMPSTR] = "";
+    char log_exename[MAXTMPSTR] = "";
+    char log_url[MAXTMPSTR] = "";
+    char log_title[MAXTMPSTR] = "";
+    DWORD log_idle_seconds = 0;
+    int log_keys = 0, log_lmb = 0, log_rmb = 0, log_scr = 0;
+    bool log_fullscreen = false;
+    bool log_controller = false;
+
     if (changesmade &&
         dwTime - lastsavetime >
             prefs[PREF_AUTOSAVE].ival * 60 * 1000) {  // dwTime wrapping has NO effect on this!
@@ -17,8 +37,13 @@ VOID CALLBACK timerfunc(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime) {
     }
 
     HWND h = GetForegroundWindow();
-    if (!h)
+    if (!h) {
+        log_reason = "no_window";
+        log_tick(log_status, log_reason, log_attributed, log_exename, log_url, log_title,
+                 log_idle_seconds, log_keys, log_lmb, log_rmb, log_scr,
+                 log_fullscreen, log_controller, timer_sample_val);
         return;
+    }
 
     // Fix to full-screen foreground windows triggering idle
     // For example: video games played with a controller, movies / presentations / videos played fullscreen, etc
@@ -34,10 +59,12 @@ VOID CALLBACK timerfunc(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime) {
             && fgrect.left == deskrect.left
             && fgrect.right == deskrect.right) {
             foregroundfullscreen = true;
+            log_fullscreen = true;
         }
     }
 
     bool controllerconnected = iscontrollerconnected();
+    log_controller = controllerconnected;
     DWORD last_activity = inputhookinactivity();
     if (controllerconnected && prefs[PREF_XINPUTACTIVITY].ival) {
         start_xinput_activity_timer();
@@ -49,15 +76,22 @@ VOID CALLBACK timerfunc(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime) {
     }
     
     DWORD idletime = (dwTime - last_activity) / 1000;  // same here
+    log_idle_seconds = idletime;
     if (foregroundfullscreen && prefs[PREF_FOREGROUNDFULLSCREEN].ival) {
         // break idle if conditions are met and user prefs want it
         idletime = 0; 
+        log_idle_seconds = 0;
     }
     if (idletime > prefs[PREF_IDLE].ival) {
         if (!changesmade)
             // save one last time while idle, don't keep saving db while
             // idle, and don't immediately save on resume
             lastsavetime = dwTime;
+        log_status = "IDLE";
+        log_reason = "idle";
+        log_tick(log_status, log_reason, log_attributed, log_exename, log_url, log_title,
+                 log_idle_seconds, log_keys, log_lmb, log_rmb, log_scr,
+                 log_fullscreen, log_controller, timer_sample_val);
         return;
     }
 
@@ -77,8 +111,13 @@ VOID CALLBACK timerfunc(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime) {
         HANDLE ph = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ /*|PROCESS_SET_QUOTA*/,
                                 FALSE, procid);
 
-        if (!ph)
+        if (!ph) {
+            log_reason = "open_process_failed";
+            log_tick(log_status, log_reason, log_attributed, log_exename, log_url, log_title,
+                     log_idle_seconds, log_keys, log_lmb, log_rmb, log_scr,
+                     log_fullscreen, log_controller, timer_sample_val);
             return;
+        }
 
         DWORD count;
         HMODULE hm;
@@ -114,7 +153,16 @@ VOID CALLBACK timerfunc(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime) {
         procid = procids[1];
     }
 
+    // Copy exename for logging
+    strncpy(log_exename, exename, MAXTMPSTR - 1);
+    log_exename[MAXTMPSTR - 1] = 0;
+
     if (strcmp(exename, "lockapp") == 0) {
+        log_reason = "lockapp";
+        strncpy(log_attributed, "lockapp", MAXTMPSTR - 1);
+        log_tick(log_status, log_reason, log_attributed, log_exename, log_url, log_title,
+                 log_idle_seconds, log_keys, log_lmb, log_rmb, log_scr,
+                 log_fullscreen, log_controller, timer_sample_val);
         return;
     }
 
@@ -159,6 +207,12 @@ VOID CALLBACK timerfunc(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime) {
     WideCharToMultiByte(CP_UTF8, 0, utitle, -1, title, MAXTMPSTR, NULL, NULL);
     title[MAXTMPSTR - 1] = 0;
 
+    // Copy URL and title for logging
+    strncpy(log_url, url, MAXTMPSTR - 1);
+    log_url[MAXTMPSTR - 1] = 0;
+    strncpy(log_title, title, MAXTMPSTR - 1);
+    log_title[MAXTMPSTR - 1] = 0;
+
     std::string s = exename;
     if (url[0] && s[0]) s += " - ";
     s += url;
@@ -167,5 +221,23 @@ VOID CALLBACK timerfunc(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime) {
 
     //OutputDebugF("timercallback: %s\n", s.c_str());
 
-    if (s[0]) addtodatabase((char *)s.c_str(), st, idletime, 0);
+    if (s[0]) {
+        // Capture input stats for logging directly from globals (before they're consumed by addtodatabase)
+        // Using same formulas as inputhookstats
+        log_keys = (key + 1) / 2;
+        log_lmb = lmb;
+        log_rmb = rmb;
+        log_scr = (scr + 119) / 120;
+        
+        addtodatabase((char *)s.c_str(), st, idletime, 0);
+        log_status = "TRACKED";
+        log_reason = "";
+        strncpy(log_attributed, s.c_str(), MAXTMPSTR - 1);
+        log_attributed[MAXTMPSTR - 1] = 0;
+    }
+
+    // Log the tick with all collected data
+    log_tick(log_status, log_reason, log_attributed, log_exename, log_url, log_title,
+             log_idle_seconds, log_keys, log_lmb, log_rmb, log_scr,
+             log_fullscreen, log_controller, timer_sample_val);
 };
