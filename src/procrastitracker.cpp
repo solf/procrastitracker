@@ -485,6 +485,31 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             // within the idle dialog time.
             TrackAwayTime(lParam);
             break;
+        case WM_USER + 100: {
+            // Save failure notification from timer callback (non-blocking)
+            char msg[512];
+            if (wParam == 0) {
+                // Temp file already exists
+                sprintf_s(msg, 512, 
+                    "Cannot save: temp file already exists.\n"
+                    "Location: %s\n\n"
+                    "This may indicate a previous save failure or disk issue.\n"
+                    "Please check disk space and file permissions, then delete the temp file manually.\n\n"
+                    "ProcrastiTracker will continue tracking in memory.",
+                    databasetemp);
+            } else {
+                // Move failed
+                sprintf_s(msg, 512, 
+                    "Failed to move temp database to final location.\n"
+                    "Temp file: %s\n"
+                    "Target: %s\n\n"
+                    "Please check file permissions and disk space.\n"
+                    "ProcrastiTracker will continue tracking in memory.",
+                    databasetemp, databasemain);
+            }
+            MessageBoxA(NULL, msg, "Database Save Failed", MB_OK | MB_ICONWARNING);
+            break;
+        }
         case WM_SYSCOMMAND:
             if ((wParam & 0xFFF0) == SC_MINIMIZE) {
                 ShowWindow(hWnd, SW_HIDE);
